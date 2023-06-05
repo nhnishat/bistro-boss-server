@@ -18,6 +18,7 @@ const VerifyJWT = (req, res, next) => {
 	}
 	// bearer token
 	const token = authorization.split(' ')[1];
+
 	jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
 		if (err) {
 			return res
@@ -47,13 +48,29 @@ async function run() {
 		// Connect the client to the server	(optional starting in v4.7)
 		await client.connect();
 
+		// verify admin
+		const verifyAdmin = async (req, res, next) => {
+			const email = req.decoded.email;
+			const query = { email: email };
+			const user = await usersCollection.findOne(query);
+			if (user?.role !== 'admin') {
+				return res
+					.status(403)
+					.send({ error: true, message: 'forbidden message' });
+			}
+			next();
+		};
+
 		const usersCollection = client.db('bistroDb').collection('users');
 		const menuCollection = client.db('bistroDb').collection('menu');
 		const reviewsCollection = client.db('bistroDb').collection('reviews');
 		const carCollection = client.db('bistroDb').collection('carts');
 
+		//  *use Jwt token: VerifyJWT
+		//  * *do not show secure link to those who should not see the links
+		// use Admin verify Admin
 		// users related api
-		app.get('/users', async (req, res) => {
+		app.get('/users', VerifyJWT, verifyAdmin, async (req, res) => {
 			const result = await usersCollection.find().toArray();
 			res.send(result);
 		});
@@ -76,6 +93,7 @@ async function run() {
 			const result = await menuCollection.find().toArray();
 			res.send(result);
 		});
+		// console.log(process.env.ACCESS_TOKEN_SECRET);
 
 		app.post('/jwt', (req, res) => {
 			const user = req.body;
@@ -88,6 +106,19 @@ async function run() {
 		// review related apis
 		app.get('/reviews', async (req, res) => {
 			const result = await reviewsCollection.find().toArray();
+			res.send(result);
+		});
+
+		// admin
+		// security level 2
+		app.get('/users/admin/:email', VerifyJWT, async (req, res) => {
+			const email = req.body.email;
+			if (req.decoded !== email) {
+				res.send({ admin: false });
+			}
+			const userEmail = { email: email };
+			const user = await usersCollection.findOne(userEmail);
+			const result = { admin: user?.role === 'admin' };
 			res.send(result);
 		});
 
@@ -114,7 +145,7 @@ async function run() {
 			if (email !== decodedEmail) {
 				return res
 					.status(403)
-					.send({ error: true, message: 'provident access' });
+					.send({ error: true, message: 'porviden access' });
 			}
 			const query = { email: email };
 			const result = await carCollection.find(query).toArray();
